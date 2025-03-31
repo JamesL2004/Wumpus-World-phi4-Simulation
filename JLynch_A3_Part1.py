@@ -41,6 +41,7 @@ class WumpusModel(mesa.Model):
         
         super().__init__()
         self.grid = mesa.space.MultiGrid(width, height, True)
+        self.effects = {(x, y): {"smell": False, "breeze": False, "glitter": False} for x in range(width) for y in range(height)}
 
         heroagent = HeroAgent(self)
         self.grid.place_agent(heroagent, [0, 0])
@@ -54,12 +55,21 @@ class WumpusModel(mesa.Model):
             for pos in position:
                 agent = agent_class(self)
                 self.grid.place_agent(agent, pos)
+                self.update_effects(pos, agent)
                 empty_cells.remove(pos)
-                print(pos)
         place_agents(PitAgent, pits)
         place_agents(WumpusAgent, wumpus)
         place_agents(GoldAgent, gold)
 
+    def update_effects(self, pos, agentType):
+        neighbors = self.grid.get_neighborhood(pos, moore=False, include_center=False)
+        for n in neighbors:
+            if agentType is PitAgent:
+                self.effects[n]["breeze"] = True
+            elif agentType is GoldAgent:
+                self.effects[n]["glitter"] = True
+            elif agentType is WumpusAgent:
+                self.effects[n]["smell"] = True
 
 def wumpus_portrayal(agent):
     if agent is None:
