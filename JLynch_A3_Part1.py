@@ -27,25 +27,25 @@ class HeroAgent(mesa.Agent):
         self.model.grid.move_agent(self, new_position)
         message = self.get_Effects() 
 
-        #output = self.model.PromptModel(
-        #    "You are a hero in a simulation that is looking to find the gold to finish the game, but there are obstacles in your way. "
-        #    "There are pits and the wumpus; if you encounter either, you fail and die. But you can tell if they are nearby by the effects they leave on neighboring tiles. "
-        #    "Pits create a breeze, and the Wumpus creates a foul smell. The gold also leaves a glitter effect nearby, so if you encounter these effects, think carefully about your next step.",
-        #    message,
-        #    "Provide a single snetance about your current position: "
-        #)
+        output = self.model.PromptModel(
+            "You are a hero in a simulation that is looking to find the gold to finish the game, but there are obstacles in your way. "
+            "There are pits and the wumpus; if you encounter either, you fail and die. But you can tell if they are nearby by the effects they leave on neighboring tiles. "
+            "Pits create a breeze, and the Wumpus creates a foul smell. The gold also leaves a glitter effect nearby, so if you encounter these effects, think carefully about your next step.",
+            message,
+            "Provide a single sentance about your current position: "
+        )
     
-        print(message)
+        print(output)
     def get_Effects(self):
         message = ""
         effects = self.model.effects[tuple(self.pos)]
         print(effects)
         if effects["smell"]:
-            message += "You smell a foul smell coming from a neighbouring tile."
+            message += "You smell a foul smell coming from a neighbouring tile. "
         if effects["breeze"]:
-            message += "You feel a breeze coming from a neighbouring tile"
+            message += "You feel a breeze coming from a neighbouring tile. "
         if effects["glitter"]:
-            message += "You see some glitter on the ground"
+            message += "You see some glitter on the ground. "
         if effects["smell"] is False and effects["breeze"] is False and effects["glitter"] is False:
             message = "There are no effects on this cell"
         return message
@@ -88,7 +88,7 @@ class WumpusModel(mesa.Model):
             position = self.random.sample(empty_cells, population)
             for pos in position:
                 agent = agent_class(self)
-                self.grid.place_agent(agent, pos)
+                self.grid.place_agent(agent, tuple(pos))
                 self.update_effects(tuple(pos), agent)
                 empty_cells.remove(pos)
         place_agents(PitAgent, pits)
