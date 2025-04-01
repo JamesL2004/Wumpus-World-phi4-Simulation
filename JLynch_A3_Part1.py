@@ -10,29 +10,45 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 
 from mesa.visualization import SolaraViz, make_plot_component, make_space_component
 
-class HeroAgent(CellAgent):
+class HeroAgent(mesa.Agent):
     def __init__(self, model):
 
         super().__init__(model)
     def step(self):
         self.move()
     def move(self):
-        message = self.getEffects()
-        output = self.model.PromptModel("You are a hero in a simulation that is looking to find the gold to finish the game, but there are obstacles in your way. There are pits and the wumpus if you encounter either you fail and die, but you can tell if they are nearby by effects they leave on the neighboring tiles around them. Pits create a breeze and Wumpus creates a foul smell. "
-        "The gold also creates an effect with leaving glitter nearby so if you encounter these effects think carefully about your next step.", message, "Your thoughts: ")
-        print(output)
+        possible_steps = self.model.grid.get_neighborhood(
+            tuple(self.pos), 
+            moore=True,
+            include_center=False
+        )
+        print(possible_steps)
+        new_position = self.random.choice(possible_steps)
+        self.model.grid.move_agent(self, new_position)
+        message = self.get_Effects() 
+
+        #output = self.model.PromptModel(
+        #    "You are a hero in a simulation that is looking to find the gold to finish the game, but there are obstacles in your way. "
+        #    "There are pits and the wumpus; if you encounter either, you fail and die. But you can tell if they are nearby by the effects they leave on neighboring tiles. "
+        #    "Pits create a breeze, and the Wumpus creates a foul smell. The gold also leaves a glitter effect nearby, so if you encounter these effects, think carefully about your next step.",
+        #    message,
+        #    "Provide a single snetance about your current position: "
+        #)
+    
+        print(message)
     def get_Effects(self):
         message = ""
-        effects = self.model.effects[self.pos]
+        effects = self.model.effects[tuple(self.pos)]
+        print(effects)
         if effects["smell"]:
             message += "You smell a foul smell coming from a neighbouring tile."
         if effects["breeze"]:
             message += "You feel a breeze coming from a neighbouring tile"
         if effects["glitter"]:
             message += "You see some glitter on the ground"
-        if not effects:
+        if effects["smell"] is False and effects["breeze"] is False and effects["glitter"] is False:
             message = "There are no effects on this cell"
-        return effects
+        return message
 
 class WumpusAgent(FixedAgent):
     def __init__(self, model):
@@ -54,8 +70,7 @@ class WumpusModel(mesa.Model):
         height=4,
         pits=3,
         gold=1,
-        wumpus=1,
-        hero=1,    
+        wumpus=1,   
     ):
         
         super().__init__()
@@ -74,7 +89,7 @@ class WumpusModel(mesa.Model):
             for pos in position:
                 agent = agent_class(self)
                 self.grid.place_agent(agent, pos)
-                self.update_effects(pos, agent)
+                self.update_effects(tuple(pos), agent)
                 empty_cells.remove(pos)
         place_agents(PitAgent, pits)
         place_agents(WumpusAgent, wumpus)
@@ -106,12 +121,13 @@ class WumpusModel(mesa.Model):
     def update_effects(self, pos, agentType):
         neighbors = self.grid.get_neighborhood(pos, moore=False, include_center=False)
         for n in neighbors:
-            if agentType is PitAgent:
-                self.effects[n]["breeze"] = True
-            elif agentType is GoldAgent:
-                self.effects[n]["glitter"] = True
-            elif agentType is WumpusAgent:
-                self.effects[n]["smell"] = True
+            if n in self.effects:  # Ensure it's a valid grid position
+                if isinstance(agentType, PitAgent):
+                    self.effects[n]["breeze"] = True
+                elif isinstance(agentType, GoldAgent):
+                    self.effects[n]["glitter"] = True
+                elif isinstance(agentType, WumpusAgent):
+                    self.effects[n]["smell"] = True
     def PromptModel(self, context, memorystream, prompt):
         
         #lower temperature generally more predictable results, you can experiment with this
@@ -188,7 +204,7 @@ model_params = {
     },
 }
 
-wumpus_model = WumpusModel(4, 4, 3, 1, 1, 1)
+wumpus_model = WumpusModel(4, 4, 3, 1, 1)
 SpaceGraph = make_space_component(wumpus_portrayal)
 
 page = SolaraViz(
