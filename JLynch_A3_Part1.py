@@ -16,15 +16,6 @@ class HeroAgent(mesa.Agent):
         super().__init__(model)
     def step(self):
         self.move()
-    def move(self):
-        possible_steps = self.model.grid.get_neighborhood(
-            tuple(self.pos), 
-            moore=True,
-            include_center=False
-        )
-        print(possible_steps)
-        new_position = self.random.choice(possible_steps)
-        self.model.grid.move_agent(self, new_position)
         message = self.get_Effects() 
 
         output = self.model.PromptModel(
@@ -34,8 +25,20 @@ class HeroAgent(mesa.Agent):
             message,
             "Provide a single sentance about your current position: "
         )
-    
         print(output)
+
+    def move(self):
+        possible_steps = self.model.grid.get_neighborhood(
+            tuple(self.pos), 
+            moore=False,
+            include_center=False
+        )
+        print(possible_steps)
+        print(self.get_Directions(possible_steps))
+        
+        new_position = self.random.choice(possible_steps)
+        self.model.grid.move_agent(self, new_position)
+
     def get_Effects(self):
         message = ""
         effects = self.model.effects[tuple(self.pos)]
@@ -44,11 +47,25 @@ class HeroAgent(mesa.Agent):
             message += "You smell a foul smell coming from a neighbouring tile. "
         if effects["breeze"]:
             message += "You feel a breeze coming from a neighbouring tile. "
-        if effects["glitter"]:
-            message += "You see some glitter on the ground. "
-        if effects["smell"] is False and effects["breeze"] is False and effects["glitter"] is False:
+        if effects["smell"] is False and effects["breeze"] is False:
             message = "There are no effects on this cell"
         return message
+    
+    def get_Directions(self, possible_steps):
+
+        possible_directions = ["left", "right", "up", "down"]
+
+        for step in possible_steps:
+            if step[0] == 0:
+                possible_directions.remove("left")
+            if step[1] == 0:
+                possible_directions.remove("down")
+            if step[0] == (self.model.width - 1):
+                possible_directions.remove("right")
+            if step[1] == (self.model.height - 1):
+                possible_directions.remove("up")
+
+        return possible_directions
 
 class WumpusAgent(FixedAgent):
     def __init__(self, model):
@@ -74,7 +91,9 @@ class WumpusModel(mesa.Model):
     ):
         
         super().__init__()
-        self.grid = mesa.space.MultiGrid(width, height, True)
+        self.width = width
+        self.height = height
+        self.grid = mesa.space.MultiGrid(width, height, False)
         self.effects = {(x, y): {"smell": False, "breeze": False, "glitter": False} for x in range(width) for y in range(height)}
 
         heroagent = HeroAgent(self)
@@ -124,8 +143,6 @@ class WumpusModel(mesa.Model):
             if n in self.effects:  # Ensure it's a valid grid position
                 if isinstance(agentType, PitAgent):
                     self.effects[n]["breeze"] = True
-                elif isinstance(agentType, GoldAgent):
-                    self.effects[n]["glitter"] = True
                 elif isinstance(agentType, WumpusAgent):
                     self.effects[n]["smell"] = True
     def PromptModel(self, context, memorystream, prompt):
