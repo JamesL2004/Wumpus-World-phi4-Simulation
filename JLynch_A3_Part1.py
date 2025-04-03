@@ -46,7 +46,8 @@ class HeroAgent(mesa.Agent):
             "The following are the possible directions you can move " + (str(possible_directions)) + " based on you current position choose one of the directions, only output a single direction: "
         )
         print(output)
-        new_position = self.random.choice(possible_steps)
+        next_step = self.get_Next_Step(output, possible_directions, possible_steps)
+        new_position = self.random.choice(next_step)
         self.model.grid.move_agent(self, new_position)
 
     def get_Effects(self):
@@ -76,8 +77,9 @@ class HeroAgent(mesa.Agent):
 
         return possible_directions
     
-    def get_Next_Cell(self, choice):
-        return
+    def get_Next_Step(self, choice, directions, possible_steps):
+        index = directions.index(choice)
+        return [possible_steps[index]]
 
 class WumpusAgent(FixedAgent):
     def __init__(self, model):
