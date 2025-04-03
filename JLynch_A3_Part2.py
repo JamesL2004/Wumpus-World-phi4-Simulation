@@ -3,8 +3,10 @@ import seaborn as sns
 import numpy as np
 import pandas as pd
 import random as rn
+import torch
 import matplotlib.pyplot as plt
 
+from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 from mesa.datacollection import DataCollector
 from mesa.visualization import SolaraViz, make_plot_component, make_space_component
 
@@ -115,6 +117,51 @@ class OutbreakModel(mesa.Model):
 
         self.running = True
         #self.datacollector.collect(self)
+        if torch.cuda.is_available():
+            for i in range(torch.cuda.device_count()):
+                print(i, torch.cuda.get_device_properties(i))
+
+        torch.random.manual_seed(0)
+
+        model_path = "microsoft/Phi-4-mini-instruct"
+
+        self.model = AutoModelForCausalLM.from_pretrained(
+            model_path,
+            device_map="cpu", # "cpu" or "auto" or "cuda:0" for cuda device 0, 1, 2, 3 etc. if you have multiple GPUs
+            torch_dtype="auto",
+            trust_remote_code=True
+        )
+        self.tokenizer = AutoTokenizer.from_pretrained(model_path)
+
+        #gotta have a tokenizer for each model otherwise the token mappings won't match
+        self.pipe = pipeline(
+            "text-generation",
+            model=self.model,
+            tokenizer=self.tokenizer
+        )
+
+    def PromptModel(self, context, memorystream, prompt):
+        
+        #lower temperature generally more predictable results, you can experiment with this
+        generation_args = {
+            "max_new_tokens": 64,
+            "return_full_text": False,
+            "temperature": 0.5,
+            "do_sample": False,
+        }
+
+        llmprompt = prompt
+        
+        messages = [
+            {"role": "system", "content": context},
+            {"role": "system", "content": memorystream},
+            {"role": "user", "content": llmprompt},
+        ]
+
+        #time1 = int(round(time.time() * 1000))
+
+        output = self.pipe(messages, **generation_args)
+        return output[0]['generated_text']
 
     def step(self):
         """Advance the model by one step."""

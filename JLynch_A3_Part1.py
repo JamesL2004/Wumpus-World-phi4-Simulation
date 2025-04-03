@@ -5,10 +5,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import torch
-from mesa.experimental.cell_space import CellAgent, FixedAgent
-from mesa.experimental.devs import ABMSimulator
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 
+from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 from mesa.visualization import SolaraViz, make_plot_component, make_space_component
 
 class HeroAgent(mesa.Agent):
