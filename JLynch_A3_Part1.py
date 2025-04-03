@@ -11,9 +11,10 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 from mesa.visualization import SolaraViz, make_plot_component, make_space_component
 
 class HeroAgent(mesa.Agent):
-    def __init__(self, model):
+    def __init__(self, model, move_history):
 
         super().__init__(model)
+        self.move_history = move_history
     def step(self):
         self.move()
         message = self.get_Effects() 
@@ -26,7 +27,6 @@ class HeroAgent(mesa.Agent):
             "Provide a single sentance about your current position: "
         )
         print(output)
-
     def move(self):
         possible_steps = self.model.grid.get_neighborhood(
             tuple(self.pos), 
@@ -38,14 +38,20 @@ class HeroAgent(mesa.Agent):
         print(possible_directions)
         #print(self.pos)
         message = self.get_Effects()
+        last_move = self.move_history[-1]
         output = self.model.PromptModel(
-            "You are a hero in a simulation that is looking to find the gold to finish the game you current position is " + str(self.pos) + ". But there are obstacles in your way. "
+            "You are a hero in a simulation that is looking to find the gold to finish the game your current position is " + str(self.pos) + "."
             "There are pits and the wumpus; if you encounter either, you fail and die. But you can tell if they are nearby by the effects they leave on neighboring tiles. "
-            "Pits create a breeze, and the Wumpus creates a foul smell. So if you encounter these effects, think carefully about your next step.",
-            message,
-            "The following are the possible directions you can move " + (str(possible_directions)) + " based on you current position choose one of the directions, only output a single direction: "
+            "Pits create a breeze, and the Wumpus creates a foul smell. So if you encounter these effects, think carefully about your next step. "
+            "The opposite of left is right and the opposite of up is down, so if you go up and sense a breeze or smell you can go down to backtrack and try a different direction. "
+            "You can do the same for all the directions if they are available"
+            "On the map you can usually move left, right, up or down, but these can chagne depending on where you are. So make sure you try all the directions to cover the whole map. A good strategy is if you don't sense abreeze or a smell keep going in that direction, but if you do sense one of them than backtrack and take a different route.",
+            message + " These are your past moves " + str(self.move_history) + " with " + str(last_move) + " being your last move",
+            "The following are the possible directions you can move " + (str(possible_directions)) + " based on the effects you can feel and your previous moves choose one of the directions, try not to repeat the same sequence of the last 2 moves so you don't end up in a loop, only output the word of the single direction no punctuation: "
         )
         print(output)
+        self.move_history.append(output)
+        print(self.move_history)
         next_step = self.get_Next_Step(output, possible_directions, possible_steps)
         new_position = self.random.choice(next_step)
         self.model.grid.move_agent(self, new_position)
@@ -80,6 +86,9 @@ class HeroAgent(mesa.Agent):
     def get_Next_Step(self, choice, directions, possible_steps):
         index = directions.index(choice)
         return [possible_steps[index]]
+    
+    def check_Cell(self):
+        return
 
 class WumpusAgent(FixedAgent):
     def __init__(self, model):
@@ -110,7 +119,7 @@ class WumpusModel(mesa.Model):
         self.grid = mesa.space.MultiGrid(width, height, False)
         self.effects = {(x, y): {"smell": False, "breeze": False, "glitter": False} for x in range(width) for y in range(height)}
 
-        heroagent = HeroAgent(self)
+        heroagent = HeroAgent(self, ["none"])
         self.grid.place_agent(heroagent, [0, 0])
         empty_cells = [(x, y) for x in range(width) for y in range(height)]
 
@@ -165,7 +174,7 @@ class WumpusModel(mesa.Model):
         generation_args = {
             "max_new_tokens": 64,
             "return_full_text": False,
-            "temperature": 0.0,
+            "temperature": 0.5,
             "do_sample": False,
         }
 
