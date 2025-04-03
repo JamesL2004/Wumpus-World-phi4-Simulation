@@ -12,11 +12,11 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 from mesa.visualization import SolaraViz, make_plot_component, make_space_component
 
 class HeroAgent(mesa.Agent):
-    def __init__(self, model, move_history, arrow):
-
+    def __init__(self, model):
         super().__init__(model)
-        self.move_history = move_history
-        self.arrow = arrow
+        self.move_history = {}  # Dictionary to store direction as key and new position as value
+        self.arrow = 1
+
     def step(self):
         message = self.get_Effects() 
 
@@ -60,6 +60,7 @@ class HeroAgent(mesa.Agent):
                         self.arrow = 0
                     else:
                         print("You failed at shooting the Wumpus")
+                self.arrow = 0
         print(output)
         self.move()
         self.check_Cell()
@@ -69,67 +70,68 @@ class HeroAgent(mesa.Agent):
             moore=False,
             include_center=False
         )
-        #print(all_directions)
         possible_directions = self.get_Directions(self.pos)
-        print(possible_directions)
-        #print(self.pos)
+        
         message = self.get_Effects()
-        last_move = self.move_history[-1]
+        last_move = list(self.move_history.keys())[-1] if self.move_history else "none"
+
+        print(f"Possible directions: {possible_directions}")
+        print(f"Last move: {last_move}")
+
         output = self.model.PromptModel(
-            "You are a hero in a simulation that is looking to find the gold to finish the game your current position is " + str(self.pos) + "."
-            "There are pits and the wumpus; if you encounter either, you fail and die. But you can tell if they are nearby by the effects they leave on neighboring tiles. "
+            "You are a hero in a simulation that is looking to find the gold to finish the game. "
+            f"Your current position is {self.pos}. "
+            "There are pits and the Wumpus; if you encounter either, you fail and die. "
             "Pits create a breeze, and the Wumpus creates a foul smell. So if you encounter these effects, think carefully about your next step. "
-            "The opposite of left is right and the opposite of up is down, so if you  sense a breeze or smell you can backtrack and try a different direction. "
-            "You can do the same for all the directions if they are available"
-            "On the map you can usually move left, right, up or down, but these can chagne depending on where you are. So make sure you try all the directions to cover the whole map. "
-            "A good strategy is if you don't sense a breeze or a smell go in that direction again, but if you do sense one of them than backtrack and take a different route.",
-            message + " These are your past moves " + str(self.move_history) + " with " + str(last_move) + " being your last move, try not to repeat the same sequence of moves so you don't end up in a loop",
-            "The following are the possible directions you can move " + (str(possible_directions)) + " based on the effects you can feel and your previous moves choose one of the directions, "
-            "only output the word of the single direction no punctuation: "
+            "A good strategy is if you don't sense a breeze or a smell, go in that direction again. "
+            "Otherwise, backtrack and take a different route.",
+            f"{message} Here is your move history: {self.move_history}. Your last move was {last_move}, so try not to repeat it unless necessary.",
+            f"The possible directions you can move are {possible_directions}. Based on the effects you sense and your previous moves, choose a direction. "
+            "Only output the word of the direction with no punctuation: "
         )
+
         print(output)
-        self.move_history.append(output)
-        print(self.move_history)
+
+        if output not in possible_directions:
+            output = self.random.choice(possible_directions)  # Ensure valid direction if LLM gives a bad one
+
         next_step = self.get_Next_Step(output, possible_directions, possible_steps)
         new_position = self.random.choice(next_step)
+
+        self.move_history[output] = new_position  # Store move in dictionary
         self.model.grid.move_agent(self, new_position)
 
     def get_Effects(self):
         message = ""
         effects = self.model.effects[tuple(self.pos)]
-        print(effects)
         if effects["smell"]:
-            message += "You smell a foul smell coming from a neighbouring tile. "
+            message += "You smell a foul smell coming from a neighboring tile. "
         if effects["breeze"]:
-            message += "You feel a breeze coming from a neighbouring tile. "
-        if effects["smell"] is False and effects["breeze"] is False:
-            message = "There are no effects on this cell"
+            message += "You feel a breeze coming from a neighboring tile. "
+        if not effects["smell"] and not effects["breeze"]:
+            message = "There are no effects on this cell."
         return message
-    
+
     def get_Directions(self, position):
-
         possible_directions = ["left", "down", "up", "right"]
-
-        if position[0] == 0 and "left" in possible_directions:
+        if position[0] == 0:
             possible_directions.remove("left")
-        elif position[0] == (self.model.width - 1) and "right" in possible_directions:
+        elif position[0] == (self.model.width - 1):
             possible_directions.remove("right")
-        if position[1] == 0 and "down" in possible_directions:
+        if position[1] == 0:
             possible_directions.remove("down")
-        elif position[1] == (self.model.height - 1) and "up" in possible_directions:
+        elif position[1] == (self.model.height - 1):
             possible_directions.remove("up")
-
         return possible_directions
-    
+
     def get_Next_Step(self, choice, directions, possible_steps):
         index = directions.index(choice)
         return [possible_steps[index]]
-    
+
     def check_Cell(self):
         other_agent = self.model.grid.get_cell_list_contents([self.pos])
         
         for agent in other_agent:
-        
             if isinstance(agent, PitAgent):
                 print("You failed by falling into a pit.")   
                 sys.exit()          
@@ -174,7 +176,7 @@ class WumpusModel(mesa.Model):
         self.grid = mesa.space.MultiGrid(width, height, False)
         self.effects = {(x, y): {"smell": False, "breeze": False, "glitter": False} for x in range(width) for y in range(height)}
 
-        heroagent = HeroAgent(self, ["none"], 1)
+        heroagent = HeroAgent(self)
         self.grid.place_agent(heroagent, [0, 0])
         empty_cells = [(x, y) for x in range(width) for y in range(height)]
 
