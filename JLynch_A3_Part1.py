@@ -33,9 +33,19 @@ class HeroAgent(mesa.Agent):
             moore=False,
             include_center=False
         )
-        print(possible_steps)
-        print(self.get_Directions(possible_steps))
-        
+        #print(all_directions)
+        possible_directions = self.get_Directions(self.pos)
+        print(possible_directions)
+        #print(self.pos)
+        message = self.get_Effects()
+        output = self.model.PromptModel(
+            "You are a hero in a simulation that is looking to find the gold to finish the game you current position is " + str(self.pos) + ". But there are obstacles in your way. "
+            "There are pits and the wumpus; if you encounter either, you fail and die. But you can tell if they are nearby by the effects they leave on neighboring tiles. "
+            "Pits create a breeze, and the Wumpus creates a foul smell. So if you encounter these effects, think carefully about your next step.",
+            message,
+            "The following are the possible directions you can move " + (str(possible_directions)) + " based on you current position choose one of the directions, only output a single direction: "
+        )
+        print(output)
         new_position = self.random.choice(possible_steps)
         self.model.grid.move_agent(self, new_position)
 
@@ -51,21 +61,23 @@ class HeroAgent(mesa.Agent):
             message = "There are no effects on this cell"
         return message
     
-    def get_Directions(self, possible_steps):
+    def get_Directions(self, position):
 
-        possible_directions = ["left", "right", "up", "down"]
+        possible_directions = ["left", "down", "up", "right"]
 
-        for step in possible_steps:
-            if step[0] == 0:
-                possible_directions.remove("left")
-            if step[1] == 0:
-                possible_directions.remove("down")
-            if step[0] == (self.model.width - 1):
-                possible_directions.remove("right")
-            if step[1] == (self.model.height - 1):
-                possible_directions.remove("up")
+        if position[0] == 0 and "left" in possible_directions:
+            possible_directions.remove("left")
+        elif position[0] == (self.model.width - 1) and "right" in possible_directions:
+            possible_directions.remove("right")
+        if position[1] == 0 and "down" in possible_directions:
+            possible_directions.remove("down")
+        elif position[1] == (self.model.height - 1) and "up" in possible_directions:
+            possible_directions.remove("up")
 
         return possible_directions
+    
+    def get_Next_Cell(self, choice):
+        return
 
 class WumpusAgent(FixedAgent):
     def __init__(self, model):
