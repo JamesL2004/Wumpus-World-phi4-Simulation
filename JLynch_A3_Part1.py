@@ -83,7 +83,7 @@ class HeroAgent(mesa.Agent):
             "You can do the same for all the directions if they are available"
             "On the map you can usually move left, right, up or down, but these can chagne depending on where you are. So make sure you try all the directions to cover the whole map. "
             "A good strategy is if you don't sense a breeze or a smell go in that direction again, but if you do sense one of them than backtrack and take a different route.",
-            message + " These are your past moves " + str(self.move_history) + " with " + str(last_move) + " being your last move, try not to repeat the same sequence of the last 3 moves so you don't end up in a loop",
+            message + " These are your past moves " + str(self.move_history) + " with " + str(last_move) + " being your last move, try not to repeat the same sequence of moves so you don't end up in a loop",
             "The following are the possible directions you can move " + (str(possible_directions)) + " based on the effects you can feel and your previous moves choose one of the directions, "
             "only output the word of the single direction no punctuation: "
         )
