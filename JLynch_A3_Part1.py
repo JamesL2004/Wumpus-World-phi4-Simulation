@@ -1,4 +1,5 @@
 import mesa
+import sys
 import seaborn as sns
 import numpy as np
 import pandas as pd
@@ -16,7 +17,6 @@ class HeroAgent(mesa.Agent):
         super().__init__(model)
         self.move_history = move_history
     def step(self):
-        self.move()
         message = self.get_Effects() 
 
         output = self.model.PromptModel(
@@ -27,6 +27,8 @@ class HeroAgent(mesa.Agent):
             "Provide a single sentance about your current position: "
         )
         print(output)
+        self.move()
+        self.check_Cell()
     def move(self):
         possible_steps = self.model.grid.get_neighborhood(
             tuple(self.pos), 
@@ -45,9 +47,10 @@ class HeroAgent(mesa.Agent):
             "Pits create a breeze, and the Wumpus creates a foul smell. So if you encounter these effects, think carefully about your next step. "
             "The opposite of left is right and the opposite of up is down, so if you go up and sense a breeze or smell you can go down to backtrack and try a different direction. "
             "You can do the same for all the directions if they are available"
-            "On the map you can usually move left, right, up or down, but these can chagne depending on where you are. So make sure you try all the directions to cover the whole map. A good strategy is if you don't sense abreeze or a smell keep going in that direction, but if you do sense one of them than backtrack and take a different route.",
+            "On the map you can usually move left, right, up or down, but these can chagne depending on where you are. So make sure you try all the directions to cover the whole map. "
+            "A good strategy is if you don't sense a breeze or a smell go in that direction again, but if you do sense one of them than backtrack and take a different route.",
             message + " These are your past moves " + str(self.move_history) + " with " + str(last_move) + " being your last move",
-            "The following are the possible directions you can move " + (str(possible_directions)) + " based on the effects you can feel and your previous moves choose one of the directions, try not to repeat the same sequence of the last 2 moves so you don't end up in a loop, only output the word of the single direction no punctuation: "
+            "The following are the possible directions you can move " + (str(possible_directions)) + " based on the effects you can feel and your previous moves choose one of the directions, try not to repeat the same sequence of the last 3 moves so you don't end up in a loop, only output the word of the single direction no punctuation: "
         )
         print(output)
         self.move_history.append(output)
@@ -88,7 +91,19 @@ class HeroAgent(mesa.Agent):
         return [possible_steps[index]]
     
     def check_Cell(self):
-        return
+        other_agent = self.model.grid.get_cell_list_contents([self.pos])
+        
+        for agent in other_agent:
+        
+            if isinstance(agent, PitAgent):
+                print("Simulation over. You failed by falling into a pit.")
+                sys.exit() 
+            elif isinstance(agent, WumpusAgent):
+                print("Simulation over. You failed by running into the Wumpus.")
+                sys.exit()  
+            elif isinstance(agent, GoldAgent):
+                print("Simulation over. YOU DID IT, you found the gold! Congratulations!")
+                sys.exit()  
 
 class WumpusAgent(FixedAgent):
     def __init__(self, model):
@@ -116,6 +131,9 @@ class WumpusModel(mesa.Model):
         super().__init__()
         self.width = width
         self.height = height
+        self.pits = pits
+        self.wumpus = wumpus
+        self.gold = gold
         self.grid = mesa.space.MultiGrid(width, height, False)
         self.effects = {(x, y): {"smell": False, "breeze": False, "glitter": False} for x in range(width) for y in range(height)}
 
@@ -190,10 +208,7 @@ class WumpusModel(mesa.Model):
 
         output = self.pipe(messages, **generation_args)
         return output[0]['generated_text']
-
-        #time2 = int(round(time.time() * 1000))
-        #print("Generation time: " + str(time2 - time1))
-        #self.datacollector.collect(self)
+    
     def step(self):
         self.agents_by_type[HeroAgent].shuffle_do("step")
 
