@@ -12,10 +12,11 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 from mesa.visualization import SolaraViz, make_plot_component, make_space_component
 
 class HeroAgent(mesa.Agent):
-    def __init__(self, model, move_history):
+    def __init__(self, model, move_history, arrow):
 
         super().__init__(model)
         self.move_history = move_history
+        self.arrow = arrow
     def step(self):
         message = self.get_Effects() 
 
@@ -26,6 +27,39 @@ class HeroAgent(mesa.Agent):
             message,
             "Provide a single sentance about your current position: "
         )
+        current_effects = self.model.effects[tuple(self.pos)]
+        if current_effects["smell"] and self.arrow == 1:
+            output = self.model.PromptModel(
+                "You are a hero in a simulation that is looking to find the gold to finish the game, but there are obstacles in your way. "
+                "There are pits and the wumpus; if you encounter either, you fail and die. But you can tell if they are nearby by the effects they leave on neighboring tiles. "
+                "Pits create a breeze, and the Wumpus creates a foul smell. The gold also leaves a glitter effect nearby, so if you encounter these effects, think carefully about your next step.",
+                "There is a foul smell nearby which means there is a wumpus in a adjancent tile to you if you want to you can shoot at one of those tiles for a chance to kill the Wumpus. But you only have one shot available so use it wisely.",
+                "Would you like to try and shoot the wumpus. Reply by only responding with yes or no: "
+            )
+            print(output)
+            if output.strip().lower() == "yes":
+                possible_directions = self.get_Directions(self.pos)
+                output = self.model.PromptModel(
+                    "You are a hero in a simulation that is looking to find the gold to finish the game, but there are obstacles in your way. "
+                    "There are pits and the wumpus; if you encounter either, you fail and die. But you can tell if they are nearby by the effects they leave on neighboring tiles. "
+                    "Pits create a breeze, and the Wumpus creates a foul smell. The gold also leaves a glitter effect nearby, so if you encounter these effects, think carefully about your next step.",
+                    "You chose to try and shoot the wumpus the following are the possible directions you can shoot " + str(possible_directions),
+                    "Based on the possible directions pick a single direction, only output the word of a single direction no puncuation:"
+                )
+                possible_steps = self.model.grid.get_neighborhood(
+                    tuple(self.pos), 
+                    moore=False,
+                    include_center=False
+                )
+                next_step = self.get_Next_Step(output, possible_directions, possible_steps)
+                shot_cell_contents = self.model.grid.get_cell_list_contents(next_step[0])
+                for agent in shot_cell_contents:
+                    if isinstance(agent, WumpusAgent):
+                        agent.dead = True
+                        print("You just shot the Wumpus.")
+                        self.arrow = 0
+                    else:
+                        print("You failed at shooting the Wumpus")
         print(output)
         self.move()
         self.check_Cell()
@@ -45,12 +79,13 @@ class HeroAgent(mesa.Agent):
             "You are a hero in a simulation that is looking to find the gold to finish the game your current position is " + str(self.pos) + "."
             "There are pits and the wumpus; if you encounter either, you fail and die. But you can tell if they are nearby by the effects they leave on neighboring tiles. "
             "Pits create a breeze, and the Wumpus creates a foul smell. So if you encounter these effects, think carefully about your next step. "
-            "The opposite of left is right and the opposite of up is down, so if you go up and sense a breeze or smell you can go down to backtrack and try a different direction. "
+            "The opposite of left is right and the opposite of up is down, so if you  sense a breeze or smell you can backtrack and try a different direction. "
             "You can do the same for all the directions if they are available"
             "On the map you can usually move left, right, up or down, but these can chagne depending on where you are. So make sure you try all the directions to cover the whole map. "
             "A good strategy is if you don't sense a breeze or a smell go in that direction again, but if you do sense one of them than backtrack and take a different route.",
-            message + " These are your past moves " + str(self.move_history) + " with " + str(last_move) + " being your last move",
-            "The following are the possible directions you can move " + (str(possible_directions)) + " based on the effects you can feel and your previous moves choose one of the directions, try not to repeat the same sequence of the last 3 moves so you don't end up in a loop, only output the word of the single direction no punctuation: "
+            message + " These are your past moves " + str(self.move_history) + " with " + str(last_move) + " being your last move, try not to repeat the same sequence of the last 3 moves so you don't end up in a loop",
+            "The following are the possible directions you can move " + (str(possible_directions)) + " based on the effects you can feel and your previous moves choose one of the directions, "
+            "only output the word of the single direction no punctuation: "
         )
         print(output)
         self.move_history.append(output)
@@ -96,24 +131,26 @@ class HeroAgent(mesa.Agent):
         for agent in other_agent:
         
             if isinstance(agent, PitAgent):
-                print("Simulation over. You failed by falling into a pit.")
-                sys.exit() 
-            elif isinstance(agent, WumpusAgent):
-                print("Simulation over. You failed by running into the Wumpus.")
-                sys.exit()  
+                print("You failed by falling into a pit.")   
+                sys.exit()          
+            elif isinstance(agent, WumpusAgent) and agent.dead is False:
+                print("You failed by running into the Wumpus.") 
+                sys.exit()
             elif isinstance(agent, GoldAgent):
-                print("Simulation over. YOU DID IT, you found the gold! Congratulations!")
-                sys.exit()  
+                print("YOU DID IT, you found the gold! Congratulations!")
+                sys.exit()
 
-class WumpusAgent(FixedAgent):
+class WumpusAgent(mesa.Agent):
     def __init__(self, model):
         super().__init__(model)
 
-class PitAgent(FixedAgent):
+        self.dead = False
+
+class PitAgent(mesa.Agent):
     def __init__(self, model):
         super().__init__(model)
 
-class GoldAgent(FixedAgent):
+class GoldAgent(mesa.Agent):
     def __init__(self, model):
         super().__init__(model)
 
@@ -137,7 +174,7 @@ class WumpusModel(mesa.Model):
         self.grid = mesa.space.MultiGrid(width, height, False)
         self.effects = {(x, y): {"smell": False, "breeze": False, "glitter": False} for x in range(width) for y in range(height)}
 
-        heroagent = HeroAgent(self, ["none"])
+        heroagent = HeroAgent(self, ["none"], 1)
         self.grid.place_agent(heroagent, [0, 0])
         empty_cells = [(x, y) for x in range(width) for y in range(height)]
 
