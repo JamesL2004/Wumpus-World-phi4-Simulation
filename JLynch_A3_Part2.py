@@ -19,7 +19,6 @@ def compute_gini(model):
 class OutbreakAgent(mesa.Agent):
 
     def __init__(self, model):
-        # Pass the parameters to the parent class.
         super().__init__(model)
 
         self.isZombie = False
@@ -50,6 +49,22 @@ class OutbreakAgent(mesa.Agent):
         print(possible_steps)
         self.model.grid.move_agent(self, new_position)
     
+    def get_Directions(self, position):
+        possible_directions = ["left", "down", "up", "right"]
+        if position[0] == 0:
+            possible_directions.remove("left")
+        elif position[0] == (self.model.width - 1):
+            possible_directions.remove("right")
+        if position[1] == 0:
+            possible_directions.remove("down")
+        elif position[1] == (self.model.height - 1):
+            possible_directions.remove("up")
+        return possible_directions
+
+    def get_Next_Step(self, choice, directions, possible_steps):
+        index = directions.index(choice)
+        return [possible_steps[index]]
+
     def infect(self):
         cellmates = self.model.grid.get_cell_list_contents([self.pos])
         humans = []
@@ -96,9 +111,9 @@ class OutbreakAgent(mesa.Agent):
 
 class OutbreakModel(mesa.Model):
     """A model with some number of agents."""
-    def __init__(self, totalAgents=100, width=20, height=20):
+    def __init__(self, totalAgents=100, width=10, height=10):
         super().__init__()
-        self.total_agents = 100
+        self.total_agents = 10
         self.grid = mesa.space.MultiGrid(width, height, True)
         self.datacollector = mesa.DataCollector(
             model_reporters={"Humans Left": compute_gini}
@@ -112,7 +127,7 @@ class OutbreakModel(mesa.Model):
             y = self.random.randrange(self.grid.height)
             self.grid.place_agent(agent, (x, y))
 
-            if rn.random() < 0.1:  # 10% chance
+            if rn.random() < 0.3:  # 10% chance
                 agent.isZombie = True
 
         self.running = True
