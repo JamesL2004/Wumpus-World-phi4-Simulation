@@ -12,56 +12,75 @@ from mesa.visualization import SolaraViz, make_plot_component, make_space_compon
 class HeroAgent(mesa.Agent):
     def __init__(self, model):
         super().__init__(model)
-        self.move_history = {}  # Dictionary to store direction as key and new position as value
+        self.move_history = {}
         self.arrow = 1
+        self.step_count = 0
 
     def step(self):
-        message = self.get_Effects() 
+        self.step_count += 1
+        message = self.get_Effects()
+        last_move = list(self.move_history.keys())[-1] if self.move_history else "none"
+        print(last_move)
 
-        output = self.model.PromptModel(
+        internal_dialogue = self.model.PromptModel(
             "You are a hero in a simulation that is looking to find the gold to finish the game, but there are obstacles in your way. "
+            f"Your current position is {self.pos}. "
             "There are pits and the wumpus; if you encounter either, you fail and die. But you can tell if they are nearby by the effects they leave on neighboring tiles. "
             "Pits create a breeze, and the Wumpus creates a foul smell. The gold also leaves a glitter effect nearby, so if you encounter these effects, think carefully about your next step.",
-            message,
-            "Provide a single sentance about your current position: "
+            f"{message} Here is your move history: {self.move_history}. Your last move was {last_move}, so try not to repeat it unless necessary.",
+            "Provide a detailed explanation of your journey so far and your current position with a 30 word limit: "
         )
+
         current_effects = self.model.effects[tuple(self.pos)]
         if current_effects["smell"] and self.arrow == 1:
-            output = self.model.PromptModel(
+            shoot_prompt = self.model.PromptModel(
                 "You are a hero in a simulation that is looking to find the gold to finish the game, but there are obstacles in your way. "
                 "There are pits and the wumpus; if you encounter either, you fail and die. But you can tell if they are nearby by the effects they leave on neighboring tiles. "
                 "Pits create a breeze, and the Wumpus creates a foul smell. The gold also leaves a glitter effect nearby, so if you encounter these effects, think carefully about your next step.",
                 "There is a foul smell nearby which means there is a wumpus in a adjancent tile to you if you want to you can shoot at one of those tiles for a chance to kill the Wumpus. But you only have one shot available so use it wisely.",
                 "Would you like to try and shoot the wumpus. Reply by only responding with yes or no: "
             )
-            print(output)
-            if output.strip().lower() == "yes":
+            if shoot_prompt.strip().lower() == "yes":
                 possible_directions = self.get_Directions(self.pos)
-                output = self.model.PromptModel(
+                shoot_dir = self.model.PromptModel(
                     "You are a hero in a simulation that is looking to find the gold to finish the game, but there are obstacles in your way. "
                     "There are pits and the wumpus; if you encounter either, you fail and die. But you can tell if they are nearby by the effects they leave on neighboring tiles. "
                     "Pits create a breeze, and the Wumpus creates a foul smell. The gold also leaves a glitter effect nearby, so if you encounter these effects, think carefully about your next step.",
-                    "You chose to try and shoot the wumpus the following are the possible directions you can shoot " + str(possible_directions),
-                    "Based on the possible directions pick a single direction, only output the word of a single direction no puncuation:"
+                    f"You chose to try and shoot the wumpus the following are the possible directions you can shoot {possible_directions}",
+                    "Based on the possible directions pick a single direction, only output the word of a single direction no punctuation:"
                 )
                 possible_steps = self.model.grid.get_neighborhood(
                     tuple(self.pos), 
                     moore=False,
                     include_center=False
                 )
-                next_step = self.get_Next_Step(output, possible_directions, possible_steps)
+                next_step = self.get_Next_Step(shoot_dir, possible_directions, possible_steps)
                 shot_cell_contents = self.model.grid.get_cell_list_contents(next_step[0])
                 for agent in shot_cell_contents:
                     if isinstance(agent, WumpusAgent):
                         agent.dead = True
-                        print("You just shot the Wumpus.")
-                        self.arrow = 0
-                    else:
-                        print("You failed at shooting the Wumpus")
+                        self.model.update_effects(agent.pos, agent, False)
+                        internal_dialogue += "\nYou successfully shot the Wumpus!"
+                        break
+                else:
+                    internal_dialogue += "\nYou failed to hit the Wumpus."
                 self.arrow = 0
-        print(output)
+
+        previous_position = self.pos
+        with open(f"hero_journey.txt", "a") as f:
+            f.write(f"Step #{self.step_count}\n")
+            f.write(f"Previous Position: {previous_position}\n")
         self.move()
+        current_position = self.pos
+        message = self.get_Effects()
+
+        with open(f"hero_journey.txt", "a") as f:
+            f.write(f"New Position: {current_position}\n")
+            f.write(f"Effects sensed: {message}\n")
+            f.write(f"Internal Dialogue: {internal_dialogue}\n")
+        
         self.check_Cell()
+
     def move(self):
         possible_steps = self.model.grid.get_neighborhood(
             tuple(self.pos), 
@@ -83,20 +102,23 @@ class HeroAgent(mesa.Agent):
             "Pits create a breeze, and the Wumpus creates a foul smell. So if you encounter these effects, think carefully about your next step. "
             "A good strategy is if you don't sense a breeze or a smell, go in that direction again. "
             "Otherwise, backtrack and take a different route.",
-            f"{message} Here is your move history: {self.move_history}. Your last move was {last_move}, so try not to repeat it unless necessary.",
+            f"{message} Here is your move history: {self.move_history}. Your last move was {last_move}. Try not to repeat the same sequence of directions so your not going in a loop",
             f"The possible directions you can move are {possible_directions}. Based on the effects you sense and your previous moves, choose a direction. "
             "Only output the word of the direction with no punctuation: "
         )
 
         print(output)
 
+        with open(f"hero_journey.txt", "a") as f:
+            f.write(f"Moved: {output}\n")
+
         if output not in possible_directions:
-            output = self.random.choice(possible_directions)  # Ensure valid direction if LLM gives a bad one
+            output = self.random.choice(possible_directions)
 
         next_step = self.get_Next_Step(output, possible_directions, possible_steps)
         new_position = self.random.choice(next_step)
 
-        self.move_history[output] = new_position  # Store move in dictionary
+        self.move_history[output] = new_position 
         self.model.grid.move_agent(self, new_position)
 
     def get_Effects(self):
@@ -131,13 +153,16 @@ class HeroAgent(mesa.Agent):
         
         for agent in other_agent:
             if isinstance(agent, PitAgent):
-                print("You failed by falling into a pit.")   
+                with open(f"hero_journey.txt", "a") as f:
+                    f.write("You failed by falling into a pit.")  
                 sys.exit()          
             elif isinstance(agent, WumpusAgent) and agent.dead is False:
-                print("You failed by running into the Wumpus.") 
+                with open(f"hero_journey.txt", "a") as f:
+                    f.write("You failed by hitting the Wumpus.") 
                 sys.exit()
             elif isinstance(agent, GoldAgent):
-                print("YOU DID IT, you found the gold! Congratulations!")
+                with open(f"hero_journey.txt", "a") as f:
+                    f.write("YOU DID IT! You found the goal congrats.")
                 sys.exit()
 
 class WumpusAgent(mesa.Agent):
@@ -186,7 +211,7 @@ class WumpusModel(mesa.Model):
             for pos in position:
                 agent = agent_class(self)
                 self.grid.place_agent(agent, tuple(pos))
-                self.update_effects(tuple(pos), agent)
+                self.update_effects(tuple(pos), agent, True)
                 empty_cells.remove(pos)
         place_agents(PitAgent, pits)
         place_agents(WumpusAgent, wumpus)
@@ -215,14 +240,16 @@ class WumpusModel(mesa.Model):
             tokenizer=self.tokenizer
         )
 
-    def update_effects(self, pos, agentType):
+    def update_effects(self, pos, agentType, active):
         neighbors = self.grid.get_neighborhood(pos, moore=False, include_center=False)
         for n in neighbors:
             if n in self.effects:  # Ensure it's a valid grid position
                 if isinstance(agentType, PitAgent):
-                    self.effects[n]["breeze"] = True
+                    self.effects[n]["breeze"] = active
                 elif isinstance(agentType, WumpusAgent):
-                    self.effects[n]["smell"] = True
+                    self.effects[n]["smell"] = active
+        if isinstance(agentType, GoldAgent):
+            self.effects[pos]["glitter"] = active
     def PromptModel(self, context, memorystream, prompt):
         
         #lower temperature generally more predictable results, you can experiment with this
