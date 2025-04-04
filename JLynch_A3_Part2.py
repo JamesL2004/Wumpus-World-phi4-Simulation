@@ -26,6 +26,7 @@ class OutbreakAgent(mesa.Agent):
         self.dead = False
         self.cureShots = 10
         self.hitPoints = 3
+        self.past_events = {}
 
     def step(self):
 
@@ -43,11 +44,31 @@ class OutbreakAgent(mesa.Agent):
     def move(self):
         possible_steps = self.model.grid.get_neighborhood(
             self.pos,
-            moore=True,
+            moore=False,
             include_center=False)
-        new_position = self.random.choice(possible_steps)
-        print(possible_steps)
-        self.model.grid.move_agent(self, new_position)
+        
+        if self.isZombie == False:
+            all_agents = list(self.model.grid.agents)
+            zombie_count = 0
+            for agent in all_agents:
+                if isinstance(agent, OutbreakAgent):
+                    zombie_count += 1
+            possible_directions = self.get_Directions(self.pos)
+            print(f"Possible directions: {possible_directions}")
+            
+            output = self.model.PromptModel(
+                f"Your name is Human {self.unique_id}, and you are currently in the middle of a zombie apocalypse where there is currently {zombie_count} zombies left."
+                f"Your goal is to keep moving to avoid the zombies and try and talk to other humans to plan. You current position is {self.pos}",
+                f"Based on your current position your available directions to move in are {possible_directions}, also the following list are important past events that happened and what tile they happened on {self.past_events}",
+                "Based on the past events provide a direction to move in next. Provide only the single direction word by itself, no puncuation:"
+            )
+            print(output)
+            next_step = self.get_Next_Step(output, possible_directions, possible_steps)
+            new_position = self.random.choice(next_step)
+            self.model.grid.move_agent(self, new_position)
+        else:
+            new_position = self.random.choice(possible_steps)
+            self.model.grid.move_agent(self, new_position)
     
     def get_Directions(self, position):
         possible_directions = ["left", "down", "up", "right"]
@@ -101,6 +122,7 @@ class OutbreakAgent(mesa.Agent):
                         self.shotsLeft -= 1
                     else:
                         other.dead = True
+                        self.past_events[self.pos] = f"You killed Zombie {other.unique_id} on this position"
         elif rn.random() < 0.7:
             if self.cureShots > 0:
                 if zombies:
@@ -114,6 +136,8 @@ class OutbreakModel(mesa.Model):
     def __init__(self, totalAgents=100, width=10, height=10):
         super().__init__()
         self.total_agents = 10
+        self.width = width
+        self.height = height
         self.grid = mesa.space.MultiGrid(width, height, True)
         self.datacollector = mesa.DataCollector(
             model_reporters={"Humans Left": compute_gini}
