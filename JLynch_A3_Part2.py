@@ -27,13 +27,26 @@ class OutbreakAgent(mesa.Agent):
         self.cureShots = 10
         self.hitPoints = 3
         self.past_events = {}
+        self.past_conversations = {}
+        self.responder = False
 
     def step(self):
-
         if self.dead == True:
             return
-
         self.move()
+
+        if self.responder == False:
+            cellmates = self.model.grid.get_cell_list_contents([self.pos])
+            humans = []
+            for cell in cellmates:
+                if cell != self and not cell.isZombie:
+                    humans.append(cell)
+            if humans: 
+                otherHuman = self.random.choice(humans)
+                otherHuman.responder = True
+                self.haveConversation(otherHuman)
+        self.responder = False
+
         if self.isZombie == True:
             self.infect()
             if rn.random() < 0.5:
@@ -54,13 +67,12 @@ class OutbreakAgent(mesa.Agent):
                 if isinstance(agent, OutbreakAgent):
                     zombie_count += 1
             possible_directions = self.get_Directions(self.pos)
-            print(f"Possible directions: {possible_directions}")
             
             output = self.model.PromptModel(
                 f"Your name is Human {self.unique_id}, and you are currently in the middle of a zombie apocalypse where there is currently {zombie_count} zombies left."
                 f"Your goal is to keep moving to avoid the zombies and try and talk to other humans to plan. You current position is {self.pos}",
                 f"Based on your current position your available directions to move in are {possible_directions}, also the following list are important past events that happened and what tile they happened on {self.past_events}",
-                "Based on the past events provide a direction to move in next. Provide only the single direction word by itself, no puncuation:"
+                "Based on the past events and some randomness to avoid repetition provide a direction to move in next. Provide only the single direction word by itself, no puncuation:"
             )
             print(output)
             next_step = self.get_Next_Step(output, possible_directions, possible_steps)
@@ -129,16 +141,32 @@ class OutbreakAgent(mesa.Agent):
                     other = self.random.choice(zombies)
                     other.isZombie = False
                     self.cureShots -= 1
+    
+    def haveConversation(self, other):
+
+        all_agents = list(self.model.grid.agents)
+        zombie_count = 0
+        for agent in all_agents:
+            if isinstance(agent, OutbreakAgent):
+                zombie_count += 1
+
+        human_conversation = self.model.PromptModel(
+            f"Your name is Human {self.unique_id}, and you are currently in the middle of a zombie apocalypse where there is currently {zombie_count} zombies left."
+            f"Your goal is to keep moving to avoid the zombies and try and talk to other humans to plan. You current position is {self.pos}",
+            f"You just ran into Human {other.unique_id}, This list is any important events that has happened to you {self.past_events} and this is the events that have happened to Human {other.unique_id}, {other.past_events}",
+            f"Generate a conversation between you: Human {self.unique_id} and the other human {other.unique_id}, about some interactions both of you have had in the world: "
+        )
+        print(human_conversation)
 
 
 class OutbreakModel(mesa.Model):
     """A model with some number of agents."""
-    def __init__(self, totalAgents=100, width=10, height=10):
+    def __init__(self, totalAgents=100, width=8, height=8):
         super().__init__()
         self.total_agents = 10
         self.width = width
         self.height = height
-        self.grid = mesa.space.MultiGrid(width, height, True)
+        self.grid = mesa.space.MultiGrid(width, height, False)
         self.datacollector = mesa.DataCollector(
             model_reporters={"Humans Left": compute_gini}
         )
@@ -251,7 +279,7 @@ def agent_portrayal(agent):
         color ="tab:red"
     return {"size": size, "color": color}
 
-outbreak_model = OutbreakModel(10, 10, 10)
+outbreak_model = OutbreakModel(10, 8, 8)
 
 SpaceGraph = make_space_component(agent_portrayal)
 GiniPlot=make_plot_component("Humans Left")
