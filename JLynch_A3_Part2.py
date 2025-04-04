@@ -10,9 +10,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 from mesa.datacollection import DataCollector
 from mesa.visualization import SolaraViz, make_plot_component, make_space_component
 
-#My first added features are the cureShots for humans to try and get more interesting results (line 86 - 90)
-#The second was giving the zombie 3 hitpoints instead of just dying right away after being shot (line 81 - 85)
-
 def compute_gini(model):
     return sum(1 for agent in model.agents if not agent.isZombie and not agent.dead) 
 
@@ -29,10 +26,18 @@ class OutbreakAgent(mesa.Agent):
         self.past_events = {}
         self.past_conversations = {}
         self.responder = False
+        self.step_count = 0
 
     def step(self):
         if self.dead == True:
             return
+        
+        self.step_count += 1
+        all_agents = list(self.model.grid.agents)
+        zombie_count = 0
+        for agent in all_agents:
+            if agent.isZombie == True:
+                zombie_count += 1
         self.move()
 
         if self.responder == False:
@@ -61,13 +66,12 @@ class OutbreakAgent(mesa.Agent):
             include_center=False)
         
         if self.isZombie == False:
+            possible_directions = self.get_Directions(self.pos)
             all_agents = list(self.model.grid.agents)
             zombie_count = 0
             for agent in all_agents:
-                if isinstance(agent, OutbreakAgent):
+                if agent.isZombie == True:
                     zombie_count += 1
-            possible_directions = self.get_Directions(self.pos)
-            
             output = self.model.PromptModel(
                 f"Your name is Human {self.unique_id}, and you are currently in the middle of a zombie apocalypse where there is currently {zombie_count} zombies left."
                 f"Your goal is to keep moving to avoid the zombies and try and talk to other humans to plan. You current position is {self.pos}",
@@ -147,16 +151,25 @@ class OutbreakAgent(mesa.Agent):
         all_agents = list(self.model.grid.agents)
         zombie_count = 0
         for agent in all_agents:
-            if isinstance(agent, OutbreakAgent):
+            if agent.isZombie == True:
                 zombie_count += 1
 
         human_conversation = self.model.PromptModel(
             f"Your name is Human {self.unique_id}, and you are currently in the middle of a zombie apocalypse where there is currently {zombie_count} zombies left."
             f"Your goal is to keep moving to avoid the zombies and try and talk to other humans to plan. You current position is {self.pos}",
-            f"You just ran into Human {other.unique_id}, This list is any important events that has happened to you {self.past_events} and this is the events that have happened to Human {other.unique_id}, {other.past_events}",
-            f"Generate a conversation between you: Human {self.unique_id} and the other human {other.unique_id}, about some interactions both of you have had in the world: "
+            f"You just ran into Human {other.unique_id}, This list is any important events that has happened to you {self.past_events} and this is the events that have happened to Human {other.unique_id}, {other.past_events}, "
+            f"This list is all the past conversations you Human {self.unique_id} has had: {self.past_conversations}, and this is the past conversations Human {other.unique_id} has had: {other.past_conversations}"
+            F"If you have had a conversation with Human {other.unique_id}, use the last conversation in {self.past_conversations} you've had with them for context.",
+            f"Generate a conversation between you: Human {self.unique_id} and the other human {other.unique_id}, about some interactions both of you have had in the world using a maximun of 100 words in total: "
         )
         print(human_conversation)
+        with open(f"a3_jlynch_part_c_chat.txt", "a") as f:
+            f.write(f"Step#: {self.step_count}\n")
+            f.write(f"Zombie's Left: {zombie_count}\n")
+            f.write(f"Conversation taken place at {self.pos}\n")
+            f.write(f"{human_conversation}\n")
+        self.past_conversations[other.unique_id] = human_conversation
+        other.past_conversations[self.unique_id] = human_conversation
 
 
 class OutbreakModel(mesa.Model):
