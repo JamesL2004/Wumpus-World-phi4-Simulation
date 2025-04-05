@@ -25,7 +25,6 @@ class OutbreakAgent(mesa.Agent):
         self.hitPoints = 3
         self.past_events = {}
         self.past_conversations = {}
-        self.responder = False
         self.step_count = 0
 
     def step(self):
@@ -40,17 +39,17 @@ class OutbreakAgent(mesa.Agent):
                 zombie_count += 1
         self.move()
 
-        if self.responder == False:
-            cellmates = self.model.grid.get_cell_list_contents([self.pos])
-            humans = []
-            for cell in cellmates:
-                if cell != self and not cell.isZombie:
-                    humans.append(cell)
-            if humans: 
-                otherHuman = self.random.choice(humans)
-                otherHuman.responder = True
-                self.haveConversation(otherHuman)
-        self.responder = False
+        
+        cellmates = self.model.grid.get_cell_list_contents([self.pos])
+        humans = []
+        for cell in cellmates:
+            if cell != self and not cell.isZombie:
+                humans.append(cell)
+        if humans: 
+            otherHuman = self.random.choice(humans)
+            otherHuman.responder = True
+            self.haveConversation(otherHuman)
+    
 
         if self.isZombie == True:
             self.infect()
@@ -156,11 +155,11 @@ class OutbreakAgent(mesa.Agent):
 
         human_conversation = self.model.PromptModel(
             f"Your name is Human {self.unique_id}, and you are currently in the middle of a zombie apocalypse where there is currently {zombie_count} zombies left."
-            f"Your goal is to keep moving to avoid the zombies and try and talk to other humans to plan. You current position is {self.pos}",
+            f"Your goal is to keep moving to avoid the zombies and try and talk to other humans to plan. You current position is {self.pos}, You have the ability to shoot zombies if you have enough ammo, you currently have {self.cureShots} bullets left.",
             f"You just ran into Human {other.unique_id}, This list is any important events that has happened to you {self.past_events} and this is the events that have happened to Human {other.unique_id}, {other.past_events}, "
             f"This list is all the past conversations you Human {self.unique_id} has had: {self.past_conversations}, and this is the past conversations Human {other.unique_id} has had: {other.past_conversations}"
             F"If you have had a conversation with Human {other.unique_id}, use the last conversation in {self.past_conversations} you've had with them for context.",
-            f"Generate a conversation between you: Human {self.unique_id} and the other human {other.unique_id}, about some interactions both of you have had in the world using a maximun of 100 words in total: "
+            f"Generate a conversation between you: Human {self.unique_id} and the other human {other.unique_id}, about some interactions both of you have had in the world, and how you are currently doing in the simulation: "
         )
         print(human_conversation)
         with open(f"a3_jlynch_part_c_chat.txt", "a") as f:
@@ -226,7 +225,7 @@ class OutbreakModel(mesa.Model):
         generation_args = {
             "max_new_tokens": 64,
             "return_full_text": False,
-            "temperature": 0.5,
+            "temperature": 1.0,
             "do_sample": False,
         }
 
